@@ -20,7 +20,6 @@ export default function QuizPage() {
   // Other UI state
   const [loading, setLoading] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [streak, setStreak] = useState(0);
   const [newQuestionFlash, setNewQuestionFlash] = useState(false);
   const [wrongAnimation, setWrongAnimation] = useState(false);
@@ -33,10 +32,7 @@ export default function QuizPage() {
 
   // Helper: load a new question with a yellow flash to indicate "NEW!"
   const loadNewQuestion = (newQ: any) => {
-    setNewQuestionFlash(true);
     setCurrentQuestion(newQ);
-    // Remove the flash effect after 1 second.
-    setTimeout(() => setNewQuestionFlash(false), 1000);
   };
 
   // Fetch all questions once on mount.
@@ -61,17 +57,19 @@ export default function QuizPage() {
     setSelectedAnswer(answer);
     // Correct answer handling:
     if (answer === currentQuestion.correct_answer) {
-      setFeedback("✅ Correct!");
+      setStreak(prev => prev + 1);
       // In normal mode:
       if (!isRedoMode) {
-        setStreak(prev => prev + 1);
+        setNewQuestionFlash(true);
+        // Remove the flash effect after 1 second.
+        setTimeout(() => setNewQuestionFlash(false), 1000);
+        
         setCorrectQuestions(prev => [...prev, currentQuestion]);
         const updatedRemaining = remainingQuestions.filter(q => q.id !== currentQuestion.id);
         setRemainingQuestions(updatedRemaining);
         if (updatedRemaining.length > 0) {
           loadNewQuestion(getRandomQuestion(updatedRemaining));
         } else {
-          setFeedback("🎉 You've answered all questions correctly!");
           setCurrentQuestion(null);
         }
       } else {
@@ -86,14 +84,12 @@ export default function QuizPage() {
           if (remainingQuestions.length > 0) {
             loadNewQuestion(getRandomQuestion(remainingQuestions));
           } else {
-            setFeedback("🎉 You've completed the quiz!");
             setCurrentQuestion(null);
           }
         }
       }
     } else {
       // Incorrect answer handling:
-      setFeedback("❌ Incorrect!");
       setWrongAnimation(true);
       setLastWrongAnswer(answer);
       // Reset the progress.
@@ -119,10 +115,14 @@ export default function QuizPage() {
 
   if (loading) return <p className="text-center text-gray-500">Loading questions...</p>;
   if (!currentQuestion)
-    return <p className="text-center text-red-500">{feedback || "No questions available."}</p>;
+    return <p className="text-center text-red-500">{"No questions available."}</p>;
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4 relative">
+      {/* Progress Bar */}
+      <div className="w-full max-w-xl mb-4 relative">
+        <h1 className="text-4xl font-bold">Trivia!</h1>
+        </div>  
       {/* Progress Bar */}
       <div className="w-full max-w-xl mb-4 relative">
         <div
@@ -135,24 +135,18 @@ export default function QuizPage() {
             style={{ width: `${Math.min((streak / 10) * 100, 100)}%` }}
           ></div>
         </div>
-        {newQuestionFlash && (
-          <div className="absolute top-0 left-0 w-full h-4 flex items-center justify-center">
-            <span className="text-yellow-500 font-bold animate-pulse">NEW!</span>
-          </div>
-        )}
+        
       </div>
 
       {/* Quiz Container */}
       <div className={`bg-white p-6 rounded-lg shadow-md w-full max-w-xl ${newQuestionFlash ? "bg-yellow-100" : ""}`}>
-        <h1 className="text-xl font-bold mb-4">
-          Trivia Question {isRedoMode ? "(Redo Mode)" : ""}
-        </h1>
+        
         <QuestionCard
           question={currentQuestion}
           onSelectAnswer={handleAnswerSelect}
-          wrongAnswer={lastWrongAnswer}  // Pass down wrong answer for button animation
+          isNew={newQuestionFlash}
         />
-        {selectedAnswer && <p className="mt-4 text-lg font-semibold">{feedback}</p>}
+        {selectedAnswer && <p className="mt-4 text-lg font-semibold"></p>}
       </div>
     </div>
   );
