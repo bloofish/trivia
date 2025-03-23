@@ -26,9 +26,11 @@ export default function Leaderboard({ refreshTrigger }: LeaderboardProps) {
   useEffect(() => {
     async function fetchLeaderboard() {
       setLoading(true);
+      const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
       const { data, error } = await supabase
         .from("leaderboard")
         .select("*")
+        .eq("completed_at", today)
         .order("time", { ascending: true }) // Lower time is better.
         .limit(10);
       if (error) {

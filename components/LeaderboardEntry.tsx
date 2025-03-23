@@ -37,11 +37,14 @@ export default function LeaderboardEntry({ time, onScoreSubmitted }: Leaderboard
     setUserId(id);
 
     const checkScoreAndQualification = async () => {
-      // Check if the user already has a leaderboard entry.
+      const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+
+      // Check if the user already has a leaderboard entry for today.
       const { data: userData, error: userError } = await supabase
         .from("leaderboard")
         .select("*")
-        .eq("user_id", id);
+        .eq("user_id", id)
+        .eq("completed_at", today);
       if (userError) {
         console.error("Error fetching leaderboard for user:", userError.message);
         setError("Error fetching leaderboard information.");
@@ -50,10 +53,11 @@ export default function LeaderboardEntry({ time, onScoreSubmitted }: Leaderboard
         setHasScore(true);
       }
 
-      // Check if the user's time qualifies for the top 10.
+      // Check if the user's time qualifies for the top 10 today.
       const { data: leaderboardData, error: leaderboardError } = await supabase
         .from("leaderboard")
         .select("*")
+        .eq("completed_at", today)
         .order("time", { ascending: true }) // lower time is better
         .limit(10);
       if (leaderboardError) {
@@ -102,10 +106,11 @@ export default function LeaderboardEntry({ time, onScoreSubmitted }: Leaderboard
       return;
     }
     const sanitized = sanitizeName(userName);
-    // Use upsert to ensure one entry per user.
+    const today = new Date().toISOString().split("T")[0]; // Get today's date in YYYY-MM-DD format
+    // Use upsert to ensure one entry per user per day.
     const { error } = await supabase
       .from("leaderboard")
-      .upsert([{ user_id: userId, username: sanitized, time }], { onConflict: "user_id" });
+      .upsert([{ user_id: userId, username: sanitized, time, completed_at: today }], { onConflict: ["user_id", "completed_at"] });
     if (error) {
       setError(error.message);
     } else {
