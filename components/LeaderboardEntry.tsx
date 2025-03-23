@@ -9,15 +9,17 @@ import leoProfanity from "leo-profanity";
 leoProfanity.loadDictionary();
 
 type LeaderboardEntryProps = {
-  score: number; // the score to upload (e.g., time taken in seconds)
+  time: number; // the time taken (lower is better)
+  onScoreSubmitted: () => void; // callback to trigger leaderboard refresh
 };
 
-export default function LeaderboardEntry({ score }: LeaderboardEntryProps) {
+export default function LeaderboardEntry({ time, onScoreSubmitted }: LeaderboardEntryProps) {
   const [userName, setUserName] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
   const [hasScore, setHasScore] = useState<boolean>(false);
+  const [qualifies, setQualifies] = useState<boolean>(false);
 
   // Create a Supabase client instance.
   const supabase = createClient(
@@ -25,32 +27,52 @@ export default function LeaderboardEntry({ score }: LeaderboardEntryProps) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // On mount, try to get or set the user ID from/in a cookie.
   useEffect(() => {
+    // Get or create a cookie-based user ID.
     let id = Cookies.get("user_id");
     if (!id) {
       id = uuidv4();
-      Cookies.set("user_id", id, { expires: 365 }); // store for 1 year
+      Cookies.set("user_id", id, { expires: 365 });
     }
     setUserId(id);
 
-    // Check if the user already has a score.
-    const checkScore = async () => {
-      const { data, error } = await supabase
+    const checkScoreAndQualification = async () => {
+      // Check if the user already has a leaderboard entry.
+      const { data: userData, error: userError } = await supabase
         .from("leaderboard")
         .select("*")
         .eq("user_id", id);
-      if (error) {
-        console.error("Error fetching leaderboard:", error.message);
+      if (userError) {
+        console.error("Error fetching leaderboard for user:", userError.message);
         setError("Error fetching leaderboard information.");
-        return;
       }
-      if (data && data.length > 0) {
+      if (userData && userData.length > 0) {
         setHasScore(true);
       }
+
+      // Check if the user's time qualifies for the top 10.
+      const { data: leaderboardData, error: leaderboardError } = await supabase
+        .from("leaderboard")
+        .select("*")
+        .order("time", { ascending: true }) // lower time is better
+        .limit(10);
+      if (leaderboardError) {
+        console.error("Error fetching leaderboard for qualification:", leaderboardError.message);
+        setError("Error checking leaderboard qualification.");
+        return;
+      }
+      if (leaderboardData) {
+        if (leaderboardData.length < 10) {
+          setQualifies(true);
+        } else {
+          const tenthEntry = leaderboardData[leaderboardData.length - 1];
+          setQualifies(time < tenthEntry.time);
+        }
+      }
     };
-    checkScore();
-  }, [supabase]);
+
+    checkScoreAndQualification();
+  }, [supabase, time]);
 
   // Helper function to check if the name is valid.
   const isValidName = (name: string): boolean => {
@@ -71,23 +93,33 @@ export default function LeaderboardEntry({ score }: LeaderboardEntryProps) {
       setError("You have already submitted a score.");
       return;
     }
+    if (!qualifies) {
+      setError("Your time does not qualify for the leaderboard.");
+      return;
+    }
     if (!userId) {
       setError("User ID is not available.");
       return;
     }
     const sanitized = sanitizeName(userName);
-    // Use upsert to ensure one score per user (make sure leaderboard table has a unique constraint on user_id).
-    const { data, error } = await supabase
+    // Use upsert to ensure one entry per user.
+    const { error } = await supabase
       .from("leaderboard")
-      .upsert([{ user_id: userId, username: sanitized, score }], { onConflict: "user_id" });
+      .upsert([{ user_id: userId, username: sanitized, time }], { onConflict: "user_id" });
     if (error) {
       setError(error.message);
     } else {
       setSuccess("Score uploaded successfully!");
       setUserName("");
       setHasScore(true);
+      onScoreSubmitted(); // Trigger leaderboard refresh in parent.
     }
   };
+
+  // Only show the entry form if the user doesn't already have a score and their time qualifies.
+  if (hasScore || !qualifies) {
+    return null;
+  }
 
   return (
     <div className="mt-4">
@@ -97,12 +129,10 @@ export default function LeaderboardEntry({ score }: LeaderboardEntryProps) {
         value={userName}
         onChange={(e) => setUserName(e.target.value)}
         className="border p-2 rounded"
-        disabled={hasScore}
       />
       <button
         onClick={handleSubmit}
         className="bg-blue-500 text-white py-2 px-4 rounded ml-2"
-        disabled={hasScore}
       >
         Submit Score
       </button>

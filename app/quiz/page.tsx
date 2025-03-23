@@ -28,18 +28,24 @@ export default function QuizPage() {
   useEffect(() => {
     async function fetchQuestions() {
       setLoading(true);
-      const { data, error } = await supabase.from("questions").select("*");
+      // Get today's date as "YYYY-MM-DD"
+      const today = new Date().toISOString().split("T")[0];
+      // Query only questions for today's date.
+      const { data, error } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("date", today);
       if (error) {
         console.error("Error fetching questions:", error.message, error.details);
       } else if (data && data.length > 0) {
-        // If more than 10 questions exist, pick 10 randomly.
+        // Shuffle and limit to 10 questions (if there are more than 10)
         const questions =
-          data.length >= 10 ? shuffleArray([...data]).slice(0, 10) : data;
+          data.length > 10 ? shuffleArray([...data]).slice(0, 10) : shuffleArray([...data]);
         setQuizQuestions(questions);
         setCurrentIndex(0);
         setStartTime(Date.now());
       } else {
-        console.error("No questions available.");
+        console.error("No questions available for today.");
       }
       setLoading(false);
     }
@@ -71,27 +77,31 @@ export default function QuizPage() {
   };
 
   // End screen showing final stats along with leaderboard components.
-  if (!loading && endTime !== null && currentIndex >= quizQuestions.length) {
-    const timeTaken =
-      endTime && startTime ? ((endTime - startTime) / 1000).toFixed(2) : "0";
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-        <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-xl text-center">
-          <h1 className="text-2xl font-bold mb-4">Quiz Complete!</h1>
-          <p className="mb-4">Time Taken: {timeTaken} seconds</p>
-            <LeaderboardEntry score={parseFloat(timeTaken)} />
-          {/* Leaderboard display */}
-          <Leaderboard />
-          <button
-            className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition mt-4"
-            onClick={() => window.location.reload()}
-          >
-            Restart Quiz
-          </button>
-        </div>
+const [refreshLeaderboard, setRefreshLeaderboard] = useState<boolean>(false);
+const finalTime = endTime && startTime ? ((endTime - startTime) / 1000) : 0;
+
+if (!loading && endTime !== null && currentIndex >= quizQuestions.length) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-xl text-center">
+        <h1 className="text-2xl font-bold mb-4">Quiz Complete!</h1>
+        <p className="mb-4">Time Taken: {finalTime} seconds</p>
+        {/* Show LeaderboardEntry only if the user hasn't submitted a username and qualifies */}
+        <LeaderboardEntry
+          time={finalTime}
+          onScoreSubmitted={() => setRefreshLeaderboard(prev => !prev)}
+        />
+        <Leaderboard refreshTrigger={refreshLeaderboard} />
+        <button
+          className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition mt-4"
+          onClick={() => window.location.reload()}
+        >
+          Restart Quiz
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   if (loading)
     return <p className="text-center text-gray-500">Loading questions...</p>;

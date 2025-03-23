@@ -11,10 +11,14 @@ const supabase = createClient(
 type LeaderboardEntry = {
   id: number;
   username: string;
-  score: number;
+  time: number;
 };
 
-export default function Leaderboard() {
+type LeaderboardProps = {
+  refreshTrigger?: boolean;
+};
+
+export default function Leaderboard({ refreshTrigger }: LeaderboardProps) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +29,8 @@ export default function Leaderboard() {
       const { data, error } = await supabase
         .from("leaderboard")
         .select("*")
-        .order("score", { ascending: false });
+        .order("time", { ascending: true }) // Lower time is better.
+        .limit(10);
       if (error) {
         console.error("Error fetching leaderboard:", error);
         setError(error.message);
@@ -35,7 +40,7 @@ export default function Leaderboard() {
       setLoading(false);
     }
     fetchLeaderboard();
-  }, []);
+  }, [refreshTrigger]);
 
   if (loading)
     return <p className="text-center text-gray-500">Loading leaderboard...</p>;
@@ -52,7 +57,7 @@ export default function Leaderboard() {
           <tr>
             <th className="py-2 border">Rank</th>
             <th className="py-2 border">Username</th>
-            <th className="py-2 border">Score</th>
+            <th className="py-2 border">Time (s)</th>
           </tr>
         </thead>
         <tbody>
@@ -60,7 +65,7 @@ export default function Leaderboard() {
             <tr key={entry.id} className="text-center">
               <td className="py-2 border">{index + 1}</td>
               <td className="py-2 border">{entry.username}</td>
-              <td className="py-2 border">{entry.score}</td>
+              <td className="py-2 border">{entry.time}</td>
             </tr>
           ))}
         </tbody>
