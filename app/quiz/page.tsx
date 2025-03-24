@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import QuestionCard from "../../components/QuestionCard";
 import Leaderboard from "../../components/Leaderboard";
 import LeaderboardEntry from "../../components/LeaderboardEntry";
+import Cookies from "js-cookie"; // Import js-cookie
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +14,12 @@ const supabase = createClient(
 
 // Simple helper to shuffle an array.
 function shuffleArray<T>(array: T[]): T[] {
-  return array.sort(() => Math.random() - 0.5);
+  const shuffledArray = [...array];
+  for (let i = shuffledArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffledArray[i], shuffledArray[j]] = [shuffledArray[j], shuffledArray[i]];
+  }
+  return shuffledArray;
 }
 
 export default function QuizPage() {
@@ -23,6 +29,7 @@ export default function QuizPage() {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [endTime, setEndTime] = useState<number | null>(null);
   const [wrongAnimation, setWrongAnimation] = useState(false);
+  const [refreshLeaderboard, setRefreshLeaderboard] = useState<boolean>(false);
 
   // Fetch questions from Supabase on mount.
   useEffect(() => {
@@ -30,6 +37,19 @@ export default function QuizPage() {
       setLoading(true);
       // Get today's date as "YYYY-MM-DD"
       const today = new Date().toISOString().split("T")[0];
+
+      // Check if the user has already completed the quiz today
+      const quizCompleted = Cookies.get("quizCompleted");
+      if (quizCompleted) {
+        const [completedDate, timeTaken] = quizCompleted.split("|");
+        if (completedDate === today) {
+          setLoading(false);
+          setEndTime(Date.now());
+          setStartTime(Date.now() - parseFloat(timeTaken) * 1000);
+          return;
+        }
+      }
+
       // Query only questions for today's date.
       const { data, error } = await supabase
         .from("questions")
@@ -61,8 +81,15 @@ export default function QuizPage() {
         // Last question answered correctly.
         setEndTime(Date.now());
         setCurrentIndex(currentIndex + 1);
+        // Set cookie to mark quiz as completed for today with time taken
+        const today = new Date().toISOString().split("T")[0];
+        const timeTaken = ((Date.now() - startTime!) / 1000).toFixed(2);
+        Cookies.set("quizCompleted", `${today}|${timeTaken}`, { expires: 1 });
       } else {
-        setCurrentIndex(currentIndex + 1);
+        const nextIndex = currentIndex + 1;
+        const shuffledAnswers = shuffleArray([...quizQuestions[nextIndex].answers]);
+        quizQuestions[nextIndex].answers = shuffledAnswers;
+        setCurrentIndex(nextIndex);
       }
     } else {
       // Wrong answer: flash progress bar red and reset quiz.
@@ -70,38 +97,34 @@ export default function QuizPage() {
       setTimeout(() => setWrongAnimation(false), 1000);
       const reshuffled = shuffleArray([...quizQuestions]);
       setQuizQuestions(reshuffled);
-      setCurrentIndex(0);
+      const nextIndex = 0;
+      const shuffledAnswers = shuffleArray([...quizQuestions[nextIndex].answers]);
+      quizQuestions[nextIndex].answers = shuffledAnswers;
+      setCurrentIndex(nextIndex);;
       setStartTime(Date.now());
       setEndTime(null);
     }
   };
 
   // End screen showing final stats along with leaderboard components.
-const [refreshLeaderboard, setRefreshLeaderboard] = useState<boolean>(false);
-const finalTime = endTime && startTime ? ((endTime - startTime) / 1000) : 0;
+  const finalTime = endTime && startTime ? parseFloat(((endTime - startTime) / 1000).toFixed(2)) : 0;
 
-if (!loading && endTime !== null && currentIndex >= quizQuestions.length) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
-      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-xl text-center">
-        <h1 className="text-2xl font-bold mb-4">Quiz Complete!</h1>
-        <p className="mb-4">Time Taken: {finalTime} seconds</p>
-        {/* Show LeaderboardEntry only if the user hasn't submitted a username and qualifies */}
-        <LeaderboardEntry
-          time={finalTime}
-          onScoreSubmitted={() => setRefreshLeaderboard(prev => !prev)}
-        />
-        <Leaderboard refreshTrigger={refreshLeaderboard} />
-        <button
-          className="bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition mt-4"
-          onClick={() => window.location.reload()}
-        >
-          Restart Quiz
-        </button>
+  if (!loading && endTime !== null && currentIndex >= quizQuestions.length) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+        <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-xl text-center">
+          <h1 className="text-2xl font-bold mb-4">Quiz Complete!</h1>
+          <p className="mb-4">Time Taken: {finalTime} seconds</p>
+          {/* Show LeaderboardEntry only if the user hasn't submitted a username and qualifies */}
+          <LeaderboardEntry
+            time={finalTime}
+            onScoreSubmitted={() => setRefreshLeaderboard(prev => !prev)}
+          />
+          <Leaderboard refreshTrigger={refreshLeaderboard} />
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   if (loading)
     return <p className="text-center text-gray-500">Loading questions...</p>;
@@ -113,6 +136,7 @@ if (!loading && endTime !== null && currentIndex >= quizQuestions.length) {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <h1 className="text-4xl font-heading mb-8">Trivia!</h1>
       {/* Progress Bar */}
       <div className="w-full max-w-xl mb-4">
         <div

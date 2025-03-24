@@ -16,12 +16,11 @@ export default function QuestionCard({
   question,
   onSelectAnswer,
   wrongAnswer,
-  isNew = false,
 }: QuestionCardProps) {
   return (
-    <div>
-      <h2 className="text-lg font-semibold mb-3">
-        {question.question} {isNew && <span className="text-green-500">NEW!</span>}
+    <div className="flex flex-col justify-between h-50">
+      <h2 className="text-lg font-semibold mb-3 flex-grow flex items-center justify-center text-center">
+        {question.question}
       </h2>
       <div className="grid grid-cols-2 gap-3">
         {question.answers.map((answer, index) => {

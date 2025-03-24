@@ -110,7 +110,7 @@ export default function LeaderboardEntry({ time, onScoreSubmitted }: Leaderboard
     // Use upsert to ensure one entry per user per day.
     const { error } = await supabase
       .from("leaderboard")
-      .upsert([{ user_id: userId, username: sanitized, time, completed_at: today }], { onConflict: ["user_id", "completed_at"] });
+      .upsert([{ user_id: userId, username: sanitized, time, completed_at: today }], { onConflict: "user_id,completed_at" });
     if (error) {
       setError(error.message);
     } else {
